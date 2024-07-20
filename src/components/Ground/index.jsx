@@ -1,42 +1,45 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useRef } from "react";
-import { CameraControls, Plane, Stats } from "@react-three/drei";
+import { CameraControls, Plane, Stats, useTexture } from "@react-three/drei";
+
 import * as THREE from "three";
 
 const Ground = () => {
   const controlsRef = useRef(); // Ref for OrbitControls
   const tileRef = useRef(); // Ref for OrbitControls
-  // const set = useThree((state) => state.set);
   const tiles = [];
   const rows = 10;
   const cols = 10;
 
-  const Tile = ({ position, color }) => {
+  const Tile = ({ position }) => {
+    const texture = useTexture("textures/ground.png");
+
     return (
-      <Plane
-        ref={position[0] === 5 && position[1] === 5 ? tileRef : null}
-        args={[1, 1]}
-        position={position}
-        receiveShadow
-      >
-        <meshLambertMaterial color={color} />
-      </Plane>
+      <>
+        <Plane
+          ref={position[0] === 5 && position[1] === 5.02 ? tileRef : null}
+          args={[1, 1]}
+          position={position}
+          receiveShadow
+        >
+          <planeGeometry />
+          <meshLambertMaterial
+            side={THREE.FrontSide}
+            vertexColors={THREE.vertexColors}
+            map={texture}
+          />
+        </Plane>
+      </>
     );
   };
 
   for (let x = 0; x < rows; x++) {
     for (let y = 0; y < cols; y++) {
-      const color = new THREE.Color(
-        Math.random(),
-        Math.random(),
-        Math.random()
-      );
       tiles.push({
         startNode: 0,
         finishNode: 0,
         row: x,
         col: y,
-        color: color,
       });
     }
   }
@@ -82,13 +85,16 @@ const Ground = () => {
         makeDefault
         maxPolarAngle={0}
         minPolarAngle={0}
-        maxAzimuthAngle={0}
-        minAzimuthAngle={0}
+        // maxAzimuthAngle={0}
+        // minAzimuthAngle={0}
         maxDistance={50}
       />
-      {tiles.map(({ row, col, color }) => (
-        <Tile key={`${row}-${col}`} position={[row, col, 0]} color={color} />
-      ))}
+      <group>
+        {tiles.map(({ row, col }) => (
+          <Tile key={`${row}-${col}`} position={[row, col + 0.02, 0]} />
+        ))}
+      </group>
+
       <Stats />
     </>
   );
