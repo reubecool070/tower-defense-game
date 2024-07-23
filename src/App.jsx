@@ -1,5 +1,7 @@
 import { Canvas } from "@react-three/fiber";
 import Ground from "./components/Ground";
+import Light from "./components/Light";
+import CameraControl from "./components/CameraControls";
 
 function App() {
   return (
@@ -12,6 +14,8 @@ function App() {
         up: [0, 0, 1], // Make sure the Z-axis is up
       }}
     >
+      <Light />
+      <CameraControl />
       <Ground />
     </Canvas>
   );

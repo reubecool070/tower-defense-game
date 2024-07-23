@@ -1,23 +1,23 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useRef } from "react";
-import { CameraControls, Plane, Stats, useTexture } from "@react-three/drei";
-
+import { Plane, Stats, useTexture } from "@react-three/drei";
 import * as THREE from "three";
+import { useThree } from "@react-three/fiber";
 
 const Ground = () => {
-  const controlsRef = useRef(); // Ref for OrbitControls
+  const controls = useThree((s) => s.controls);
   const tileRef = useRef(); // Ref for OrbitControls
   const tiles = [];
   const rows = 10;
   const cols = 10;
 
   const Tile = ({ position }) => {
-    const texture = useTexture("textures/ground.png");
+    const texture = useTexture("textures/grass.jpg");
 
     return (
       <>
         <Plane
-          ref={position[0] === 5 && position[1] === 5.02 ? tileRef : null}
+          ref={position[0] === 5 && position[1] === 5 ? tileRef : null}
           args={[1, 1]}
           position={position}
           receiveShadow
@@ -47,51 +47,26 @@ const Ground = () => {
   // Function to reset the camera
   const resetCamera = () => {
     // Ensure controlsRef.current is defined
-    if (!tileRef.current || !controlsRef.current) return;
+    if (!tileRef.current || !controls) return;
 
-    controlsRef.current.fitToBox(tileRef.current, false, {
+    controls.fitToBox(tileRef.current, false, {
       paddingLeft: 10,
       paddingRight: 10,
       paddingTop: 6,
       paddingBottom: 5,
     });
-    controlsRef.current.truckSpeed = 0;
+    controls.truckSpeed = 0;
   };
 
   useEffect(() => {
-    if (tileRef.current && controlsRef.current) {
-      resetCamera();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tileRef.current, controlsRef.current]);
+    resetCamera();
+  }, [tileRef.current, controls]);
 
   return (
     <>
-      <ambientLight intensity={0.5} />
-      <directionalLight
-        position={[10, 10, 10]}
-        intensity={1}
-        castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
-        shadow-camera-far={50}
-        shadow-camera-left={-10}
-        shadow-camera-right={10}
-        shadow-camera-top={10}
-        shadow-camera-bottom={-10}
-      />
-      <CameraControls
-        ref={controlsRef}
-        makeDefault
-        maxPolarAngle={0}
-        minPolarAngle={0}
-        // maxAzimuthAngle={0}
-        // minAzimuthAngle={0}
-        maxDistance={50}
-      />
       <group>
         {tiles.map(({ row, col }) => (
-          <Tile key={`${row}-${col}`} position={[row, col + 0.02, 0]} />
+          <Tile key={`${row}-${col}`} position={[row, col, 0]} />
         ))}
       </group>
 
