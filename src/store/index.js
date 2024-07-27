@@ -1,12 +1,22 @@
-import { create } from "zustand";
+import create from "zustand";
 
 export const useGameStore = create((set) => ({
-  clickableObjs: [],
+  clickableObjs: new Set(),
   addClickableObjs: (obj) =>
-    set((state) => ({ bears: state.clickableObjs.push(obj) })),
-  removeAllObjects: () => set({ clickableObjs: [] }),
+    set((state) => {
+      const newSet = new Set(state.clickableObjs);
+      newSet.add(obj);
+      return { clickableObjs: newSet };
+    }),
+  removeAllObjects: () => set({ clickableObjs: new Set() }),
   removeClickableObj: (obj) =>
-    set((state) => ({
-      clickableObjs: state.filter((object) => obj.uuid !== object.uuid),
-    })),
+    set((state) => {
+      const newSet = new Set(state.clickableObjs);
+      newSet.forEach((item) => {
+        if (item.uuid === obj.uuid) {
+          newSet.delete(item);
+        }
+      });
+      return { clickableObjs: newSet };
+    }),
 }));

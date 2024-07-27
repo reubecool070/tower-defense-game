@@ -2,6 +2,7 @@ import { Plane, useTexture, shaderMaterial } from "@react-three/drei";
 import { useThree, extend } from "@react-three/fiber";
 import { useEffect, useRef, useMemo } from "react";
 import * as THREE from "three";
+import { useGameStore } from "../../store";
 
 const TileShaderMaterial = shaderMaterial(
   { uTexture1: null, uTexture2: null, uMixRatio: 0.5 },
@@ -28,43 +29,47 @@ const Tile = ({ position, startNode, finishNode }) => {
   const texture1 = useTexture("textures/grass.jpg");
   const texture2 = useTexture("textures/grass-1.jpg");
   const texture3 = useTexture("textures/ground-3.jpg");
+  const midTileRef = useRef();
   const tileRef = useRef();
   const controls = useThree((s) => s.controls);
   const scene = useThree((s) => s.scene);
+  const addClickableObjs = useGameStore((s) => s.addClickableObjs);
 
   // Function to reset the camera
   const resetCamera = () => {
-    if (!tileRef.current || !controls) return;
+    if (!midTileRef.current || !controls) return;
 
-    controls.fitToBox(tileRef.current, false, {
+    controls.fitToBox(midTileRef.current, false, {
       paddingLeft: 10,
       paddingRight: 10,
       paddingTop: 6,
       paddingBottom: 5,
     });
+    controls.truckSpeed = 0;
     console.log(scene);
   };
 
   useEffect(() => {
     resetCamera();
-  }, [tileRef.current, controls]);
+  }, [midTileRef.current, controls]);
 
   const materialRef = useRef();
   const mixRatio = useMemo(() => Math.random(), []);
 
-  //   useFrame(() => {
-  //     if (materialRef.current) {
-  //       materialRef.current.uniforms.uMixRatio.value = mixRatio;
-  //     }
-  //   });
+  useEffect(() => {
+    if (tileRef.current) {
+      addClickableObjs(tileRef.current);
+    }
+  }, [tileRef.current]);
 
   return (
     <Plane
-      ref={position[0] === 5 && position[1] === 5 ? tileRef : null}
+      ref={position[0] === 5 && position[1] === 5 ? midTileRef : tileRef}
       args={[1, 1]}
       position={position}
       receiveShadow
       name={`plane-${position[0]}-${position[1]}`}
+      // onPointerMove={(ev) => console.log(ev)}
     >
       <tileShaderMaterial
         ref={materialRef}
