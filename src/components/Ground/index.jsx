@@ -1,4 +1,3 @@
-/* eslint-disable react/prop-types */
 import { useEffect, useRef, useState } from "react";
 import Tile from "../Tile";
 import { astar, getShortestPathInOrder } from "../../algorithms/astar";
@@ -28,7 +27,7 @@ const Ground = () => {
   const elapsedTimeRef = useRef(0);
   const raycaster = useRef(new THREE.Raycaster());
 
-  useEffect(() => {
+  const createTilesGrid = () => {
     const tiles = [];
     for (let x = 0; x < DEFAULT_ROWS; x++) {
       const currentRow = [];
@@ -37,39 +36,69 @@ const Ground = () => {
       }
       tiles.push(currentRow);
     }
+    return tiles;
+  };
+
+  const resetTilesGrid = () => {
+    const tiles = [];
+    for (let x = 0; x < DEFAULT_ROWS; x++) {
+      const currentRow = [];
+      for (let y = 0; y < DEFAULT_COLS; y++) {
+        const node = tilesGrid[x][y];
+        currentRow.push({
+          ...node,
+          distance: Infinity,
+          totalDistance: Infinity,
+          isVisited: false,
+          // isTower: false,
+          previousNode: null,
+        });
+      }
+      tiles.push(currentRow);
+    }
+    return tiles;
+  };
+
+  useEffect(() => {
+    const tiles = createTilesGrid();
 
     setTilesGrid(tiles);
+
     const startNode = tiles[START_NODE_ROW][START_NODE_COLUMN];
     const finishNode = tiles[FINISH_NODE_ROW][FINISH_NODE_COLUMN];
     astar(tiles, startNode, finishNode);
-    const shortedPathInOrder = getShortestPathInOrder(finishNode);
-    setPath(shortedPathInOrder);
+    const shortestPathInOrder = getShortestPathInOrder(finishNode);
+
+    setPath(shortestPathInOrder);
   }, []);
 
-  useFrame((state, delta) => {
-    if (minionRef.current && path.length > 0) {
-      const duration = 50; // Total duration in seconds to complete the path
-      const totalSteps = path.length;
-      const stepDuration = duration / totalSteps;
+  useFrame(
+    (state, delta) => {
+      if (minionRef.current && path.length > 0) {
+        const duration = 30; // Total duration in seconds to complete the path
+        const totalSteps = path.length;
+        const stepDuration = duration / totalSteps;
 
-      elapsedTimeRef.current += delta;
+        elapsedTimeRef.current += delta;
 
-      while (elapsedTimeRef.current >= stepDuration && pathIndexRef.current < totalSteps - 1) {
-        elapsedTimeRef.current -= stepDuration;
-        pathIndexRef.current++;
+        while (elapsedTimeRef.current >= stepDuration && pathIndexRef.current < totalSteps - 1) {
+          elapsedTimeRef.current -= stepDuration;
+          pathIndexRef.current++;
+        }
+
+        const start = path[pathIndexRef.current];
+        const end = path[pathIndexRef.current + 1] || start;
+
+        const t = elapsedTimeRef.current / stepDuration;
+        minionRef.current.position.lerpVectors(
+          new THREE.Vector3(start.row, start.col, 0.25),
+          new THREE.Vector3(end.row, end.col, 0.25),
+          t
+        );
       }
-
-      const start = path[pathIndexRef.current];
-      const end = path[pathIndexRef.current + 1] || start;
-
-      const t = elapsedTimeRef.current / stepDuration;
-      minionRef.current.position.lerpVectors(
-        new THREE.Vector3(start.row, start.col, 0.25),
-        new THREE.Vector3(end.row, end.col, 0.25),
-        t
-      );
-    }
-  });
+    },
+    [path]
+  );
 
   const handlePointerMove = (event) => {
     const { clientX, clientY } = event;
@@ -91,13 +120,33 @@ const Ground = () => {
     if (temporaryTower) {
       removeClickableObj(temporaryTower);
       // update isTower to true for that tile
-      const _grids = tilesGrid.slice();
+      const _grids = resetTilesGrid();
+
       _grids[temporaryTower.position.x][temporaryTower.position.y].isTower = true;
       setTilesGrid(_grids);
 
       setTowers([...towers, temporaryTower]);
       setTemporaryTower(null);
+
+      // Recalculate the path from the current minion position
+      recalculatePath(_grids);
     }
+  };
+
+  const recalculatePath = (_grids) => {
+    const currentMinionPos = minionRef.current.position;
+
+    const currentRow = Math.round(currentMinionPos.x);
+    const currentCol = Math.round(currentMinionPos.y);
+
+    const newStartNode = _grids[currentRow][currentCol];
+    const finishNode = _grids[FINISH_NODE_ROW][FINISH_NODE_COLUMN];
+
+    astar(_grids, newStartNode, finishNode);
+    const shortestPathInOrder = getShortestPathInOrder(finishNode);
+    pathIndexRef.current = 0;
+    elapsedTimeRef.current = 0;
+    setPath(shortestPathInOrder);
   };
 
   useEffect(() => {
@@ -111,6 +160,7 @@ const Ground = () => {
       gl.domElement.removeEventListener("mouseup", handlePointerUp);
     };
   }, [temporaryTower, towers, clickableObjs]);
+
   return (
     <>
       <mesh ref={minionRef} position={[0, 5, 0.25]} renderOrder={2}>
@@ -118,12 +168,13 @@ const Ground = () => {
         <meshBasicMaterial />
       </mesh>
       <group>
-        {tilesGrid.flat().map(({ row, col, startNode, finishNode }) => (
+        {tilesGrid.flat().map((rest) => (
           <Tile
-            key={`${row}-${col}`}
-            position={[row, col, 0]}
-            startNode={startNode}
-            finishNode={finishNode}
+            key={`${rest.row}-${rest.col}`}
+            position={[rest.row, rest.col, 0]}
+            startNode={rest.startNode}
+            finishNode={rest.finishNode}
+            rest={rest}
           />
         ))}
 
@@ -157,6 +208,6 @@ const createInitialGrid = (x, y) => {
     isVisited: false,
     isTower: false,
     previousNode: null,
-    name: "node",
+    name: `node`,
   };
 };

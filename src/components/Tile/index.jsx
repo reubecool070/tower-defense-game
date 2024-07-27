@@ -25,7 +25,7 @@ const TileShaderMaterial = shaderMaterial(
 extend({ TileShaderMaterial });
 
 // eslint-disable-next-line react/prop-types
-const Tile = ({ position, startNode, finishNode }) => {
+const Tile = ({ position, startNode, finishNode, rest }) => {
   const texture1 = useTexture("textures/grass.jpg");
   const texture2 = useTexture("textures/grass-1.jpg");
   const texture3 = useTexture("textures/ground-3.jpg");
@@ -70,6 +70,7 @@ const Tile = ({ position, startNode, finishNode }) => {
       receiveShadow
       name={`plane-${position[0]}-${position[1]}`}
       // onPointerMove={(ev) => console.log(ev)}
+      userData={rest}
     >
       <tileShaderMaterial
         ref={materialRef}
