@@ -54,10 +54,7 @@ const Ground = () => {
 
       elapsedTimeRef.current += delta;
 
-      while (
-        elapsedTimeRef.current >= stepDuration &&
-        pathIndexRef.current < totalSteps - 1
-      ) {
+      while (elapsedTimeRef.current >= stepDuration && pathIndexRef.current < totalSteps - 1) {
         elapsedTimeRef.current -= stepDuration;
         pathIndexRef.current++;
       }
@@ -81,9 +78,7 @@ const Ground = () => {
     const y = -((clientY - top) / height) * 2 + 1;
 
     raycaster.current.setFromCamera(new THREE.Vector2(x, y), camera);
-    const intersects = raycaster.current.intersectObjects(
-      Array.from(clickableObjs)
-    );
+    const intersects = raycaster.current.intersectObjects(Array.from(clickableObjs));
 
     // TODO: intersects should not be on startnode and finishnode
     if (intersects.length > 0) {
@@ -95,6 +90,11 @@ const Ground = () => {
   const handlePointerUp = () => {
     if (temporaryTower) {
       removeClickableObj(temporaryTower);
+      // update isTower to true for that tile
+      const _grids = tilesGrid.slice();
+      _grids[temporaryTower.position.x][temporaryTower.position.y].isTower = true;
+      setTilesGrid(_grids);
+
       setTowers([...towers, temporaryTower]);
       setTemporaryTower(null);
     }
@@ -130,7 +130,7 @@ const Ground = () => {
         {towers.map(({ position }, index) => (
           <mesh key={index} position={position} renderOrder={2}>
             <boxGeometry args={[0.5, 0.5, 0.5]} />
-            <meshBasicMaterial color="blue" />
+            <meshBasicMaterial color="green" />
           </mesh>
         ))}
         {temporaryTower && (

@@ -17,7 +17,7 @@ export const astar = (grid, startNode, finishNode) => {
     // Extract the first node
     const closestNode = unvisitedNodes.shift();
     // If we encounter a wall, we skip it.
-    if (closestNode.isWall) continue;
+    if (closestNode.isTower) continue;
     // Stops if the closest node's distance is infinity.
     if (closestNode.distance === Infinity) return visitedNodesInOrder;
     closestNode.isVisited = true;
