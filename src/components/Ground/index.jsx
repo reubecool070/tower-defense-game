@@ -50,7 +50,6 @@ const Ground = () => {
           distance: Infinity,
           totalDistance: Infinity,
           isVisited: false,
-          // isTower: false,
           previousNode: null,
         });
       }
@@ -61,16 +60,17 @@ const Ground = () => {
 
   useEffect(() => {
     const tiles = createTilesGrid();
-
     setTilesGrid(tiles);
+    calculateInitialPath(tiles);
+  }, []);
 
+  const calculateInitialPath = (tiles) => {
     const startNode = tiles[START_NODE_ROW][START_NODE_COLUMN];
     const finishNode = tiles[FINISH_NODE_ROW][FINISH_NODE_COLUMN];
     astar(tiles, startNode, finishNode);
     const shortestPathInOrder = getShortestPathInOrder(finishNode);
-
     setPath(shortestPathInOrder);
-  }, []);
+  };
 
   useFrame(
     (state, delta) => {
@@ -109,7 +109,6 @@ const Ground = () => {
     raycaster.current.setFromCamera(new THREE.Vector2(x, y), camera);
     const intersects = raycaster.current.intersectObjects(Array.from(clickableObjs));
 
-    // TODO: intersects should not be on startnode and finishnode
     if (intersects.length > 0) {
       const obj = intersects[0].object;
       setTemporaryTower(obj);
@@ -118,35 +117,31 @@ const Ground = () => {
 
   const handlePointerUp = () => {
     if (temporaryTower) {
-      removeClickableObj(temporaryTower);
-      // update isTower to true for that tile
       const _grids = resetTilesGrid();
-
       _grids[temporaryTower.position.x][temporaryTower.position.y].isTower = true;
-      setTilesGrid(_grids);
 
-      setTowers([...towers, temporaryTower]);
-      setTemporaryTower(null);
+      const currentMinionPos = minionRef.current.position;
+      const currentRow = Math.round(currentMinionPos.x);
+      const currentCol = Math.round(currentMinionPos.y);
+      const newStartNode = _grids[currentRow][currentCol];
+      const finishNode = _grids[FINISH_NODE_ROW][FINISH_NODE_COLUMN];
 
-      // Recalculate the path from the current minion position
-      recalculatePath(_grids);
+      astar(_grids, newStartNode, finishNode);
+      const shortestPathInOrder = getShortestPathInOrder(finishNode);
+      console.log(shortestPathInOrder);
+
+      if (shortestPathInOrder.length > 1) {
+        removeClickableObj(temporaryTower);
+        setTilesGrid(_grids);
+        setTowers([...towers, temporaryTower]);
+        pathIndexRef.current = 0;
+        elapsedTimeRef.current = 0;
+        setPath(shortestPathInOrder);
+        setTemporaryTower(null);
+      } else {
+        console.warn("Placing this tower will block the path. Try another position.");
+      }
     }
-  };
-
-  const recalculatePath = (_grids) => {
-    const currentMinionPos = minionRef.current.position;
-
-    const currentRow = Math.round(currentMinionPos.x);
-    const currentCol = Math.round(currentMinionPos.y);
-
-    const newStartNode = _grids[currentRow][currentCol];
-    const finishNode = _grids[FINISH_NODE_ROW][FINISH_NODE_COLUMN];
-
-    astar(_grids, newStartNode, finishNode);
-    const shortestPathInOrder = getShortestPathInOrder(finishNode);
-    pathIndexRef.current = 0;
-    elapsedTimeRef.current = 0;
-    setPath(shortestPathInOrder);
   };
 
   useEffect(() => {
@@ -168,13 +163,12 @@ const Ground = () => {
         <meshBasicMaterial />
       </mesh>
       <group>
-        {tilesGrid.flat().map((rest) => (
+        {tilesGrid.flat().map((tile) => (
           <Tile
-            key={`${rest.row}-${rest.col}`}
-            position={[rest.row, rest.col, 0]}
-            startNode={rest.startNode}
-            finishNode={rest.finishNode}
-            rest={rest}
+            key={`${tile.row}-${tile.col}`}
+            position={[tile.row, tile.col, 0]}
+            startNode={tile.startNode}
+            finishNode={tile.finishNode}
           />
         ))}
 
