@@ -17,9 +17,9 @@ const CameraControl = () => {
       <CameraControls
         ref={controlsRef}
         makeDefault
-        maxPolarAngle={0}
-        minPolarAngle={0}
-        minDistance={1}
+        // maxPolarAngle={0}
+        // minPolarAngle={0}
+        // minDistance={1}
       />
     </>
   );
