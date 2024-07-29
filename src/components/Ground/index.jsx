@@ -74,27 +74,21 @@ const Ground = () => {
 
   useFrame(
     (state, delta) => {
-      if (minionRef.current && path.length > 0) {
-        const duration = 30; // Total duration in seconds to complete the path
-        const totalSteps = path.length;
-        const stepDuration = duration / totalSteps;
+      if (minionRef.current && path.length > 0 && pathIndexRef.current < path.length) {
+        const minion = minionRef.current;
+        const speed = 1.0;
+        const pathIndex = pathIndexRef.current;
+        const start = path[pathIndex];
 
-        elapsedTimeRef.current += delta;
+        const targetPosition = new THREE.Vector3(start.row, start.col, 0.25);
+        console.log(targetPosition);
+        const direction = targetPosition.clone().sub(minion.position).normalize();
+        minion.position.add(direction.multiplyScalar(delta * speed));
 
-        while (elapsedTimeRef.current >= stepDuration && pathIndexRef.current < totalSteps - 1) {
-          elapsedTimeRef.current -= stepDuration;
+        if (minion.position.distanceToSquared(targetPosition) < 0.01) {
           pathIndexRef.current++;
         }
-
-        const start = path[pathIndexRef.current];
-        const end = path[pathIndexRef.current + 1] || start;
-
-        const t = elapsedTimeRef.current / stepDuration;
-        minionRef.current.position.lerpVectors(
-          new THREE.Vector3(start.row, start.col, 0.25),
-          new THREE.Vector3(end.row, end.col, 0.25),
-          t
-        );
+        // TODO: Once it reaches the end, remove it from the scene and subract heart value
       }
     },
     [path]
@@ -128,7 +122,6 @@ const Ground = () => {
 
       astar(_grids, newStartNode, finishNode);
       const shortestPathInOrder = getShortestPathInOrder(finishNode);
-      console.log(shortestPathInOrder);
 
       if (shortestPathInOrder.length > 1) {
         removeClickableObj(temporaryTower);
@@ -169,6 +162,7 @@ const Ground = () => {
             position={[tile.row, tile.col, 0]}
             startNode={tile.startNode}
             finishNode={tile.finishNode}
+            rest={tile}
           />
         ))}
 
