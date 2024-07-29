@@ -24,7 +24,6 @@ const Ground = () => {
 
   const minionRef = useRef();
   const pathIndexRef = useRef(0);
-  const elapsedTimeRef = useRef(0);
   const raycaster = useRef(new THREE.Raycaster());
 
   const createTilesGrid = () => {
@@ -70,28 +69,28 @@ const Ground = () => {
     astar(tiles, startNode, finishNode);
     const shortestPathInOrder = getShortestPathInOrder(finishNode);
     setPath(shortestPathInOrder);
+    pathIndexRef.current = 0; // Reset path index when path is recalculated
+    if (minionRef.current) {
+      minionRef.current.position.set(START_NODE_ROW, START_NODE_COLUMN, 0.25);
+    }
   };
 
-  useFrame(
-    (state, delta) => {
-      if (minionRef.current && path.length > 0 && pathIndexRef.current < path.length) {
-        const minion = minionRef.current;
-        const speed = 1.0;
-        const pathIndex = pathIndexRef.current;
-        const start = path[pathIndex];
+  useFrame((state, delta) => {
+    if (minionRef.current && path.length > 0 && pathIndexRef.current < path.length) {
+      const minion = minionRef.current;
+      const speed = 1.0;
+      const pathIndex = pathIndexRef.current;
+      const target = path[pathIndex];
+      const targetPosition = new THREE.Vector3(target.row, target.col, 0.25);
+      const direction = targetPosition.clone().sub(minion.position).normalize();
+      minion.position.add(direction.multiplyScalar(delta * speed));
 
-        const targetPosition = new THREE.Vector3(start.row, start.col, 0.25);
-        const direction = targetPosition.clone().sub(minion.position).normalize();
-        minion.position.add(direction.multiplyScalar(delta * speed));
-
-        if (minion.position.distanceToSquared(targetPosition) < 0.01) {
-          pathIndexRef.current++;
-        }
-        // TODO: Once it reaches the end, remove it from the scene and subract heart value
+      if (minion.position.distanceToSquared(targetPosition) < 0.01) {
+        pathIndexRef.current++;
       }
-    },
-    [path]
-  );
+      // TODO: Once it reaches the end, remove it from the scene and subract heart value
+    }
+  });
 
   const handlePointerMove = (event) => {
     const { clientX, clientY } = event;
@@ -127,7 +126,6 @@ const Ground = () => {
         setTilesGrid(_grids);
         setTowers([...towers, temporaryTower]);
         pathIndexRef.current = 0;
-        elapsedTimeRef.current = 0;
         setPath(shortestPathInOrder);
         setTemporaryTower(null);
       } else {
@@ -166,13 +164,16 @@ const Ground = () => {
         ))}
 
         {towers.map(({ position }, index) => (
-          <mesh key={index} position={position} renderOrder={2}>
+          <mesh key={index} position={[position.x, position.y, 0.25]} renderOrder={2}>
             <boxGeometry args={[0.5, 0.5, 0.5]} />
             <meshBasicMaterial color="green" />
           </mesh>
         ))}
         {temporaryTower && (
-          <mesh position={temporaryTower.position} renderOrder={2}>
+          <mesh
+            position={[temporaryTower.position.x, temporaryTower.position.y, 0.25]}
+            renderOrder={2}
+          >
             <boxGeometry args={[0.5, 0.5, 0.5]} />
             <meshBasicMaterial color="red" />
           </mesh>
