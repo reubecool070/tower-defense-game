@@ -81,7 +81,6 @@ const Ground = () => {
         const start = path[pathIndex];
 
         const targetPosition = new THREE.Vector3(start.row, start.col, 0.25);
-        console.log(targetPosition);
         const direction = targetPosition.clone().sub(minion.position).normalize();
         minion.position.add(direction.multiplyScalar(delta * speed));
 
