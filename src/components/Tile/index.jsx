@@ -32,7 +32,7 @@ const Tile = ({ position, startNode, finishNode, rest }) => {
   const midTileRef = useRef();
   const tileRef = useRef();
   const controls = useThree((s) => s.controls);
-  const scene = useThree((s) => s.scene);
+  // const scene = useThree((s) => s.scene);
   const addClickableObjs = useGameStore((s) => s.addClickableObjs);
 
   // Function to reset the camera
@@ -46,7 +46,7 @@ const Tile = ({ position, startNode, finishNode, rest }) => {
       paddingBottom: 5,
     });
     controls.truckSpeed = 0;
-    console.log(scene);
+    addClickableObjs(midTileRef.current);
   };
 
   useEffect(() => {

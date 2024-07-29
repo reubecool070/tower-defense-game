@@ -13,7 +13,7 @@ const FINISH_NODE_ROW = 9;
 const FINISH_NODE_COLUMN = 0;
 
 const Ground = () => {
-  const { camera, gl } = useThree();
+  const { camera, gl, scene } = useThree();
   const clickableObjs = useGameStore((s) => s.clickableObjs);
   const removeClickableObj = useGameStore((s) => s.removeClickableObj);
 
@@ -88,7 +88,9 @@ const Ground = () => {
       if (minion.position.distanceToSquared(targetPosition) < 0.01) {
         pathIndexRef.current++;
       }
+    } else if (path.length && path.length === pathIndexRef.current) {
       // TODO: Once it reaches the end, remove it from the scene and subract heart value
+      scene.remove(minionRef.current);
     }
   });
 
