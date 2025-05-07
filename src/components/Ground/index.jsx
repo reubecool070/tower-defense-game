@@ -75,10 +75,45 @@ const Ground = () => {
     }
   };
 
+  const createFireParticle = () => {
+    const geometry = new THREE.SphereGeometry(0.1, 8, 8);
+    const material = new THREE.MeshBasicMaterial({ color: 0xff4500 });
+    const particle = new THREE.Mesh(geometry, material);
+    return particle;
+  };
+
+  const detectMinionsInRange = (towerPosition, minions, range) => {
+    const minionsInRange = minions.filter((minion) => {
+      const distance = towerPosition.distanceTo(minion.position);
+      return distance <= range;
+    });
+    return minionsInRange;
+  };
+
+  const emitParticleTowardsMinion = (towerPosition, minionPosition, createParticle) => {
+    const particle = createParticle();
+    particle.position.copy(towerPosition);
+    const direction = new THREE.Vector3().subVectors(minionPosition, towerPosition).normalize();
+    const speed = 1.0;
+
+    const animateParticle = () => {
+      particle.position.add(direction.clone().multiplyScalar(speed * 0.016)); // Assuming 60 FPS
+      if (particle.position.distanceTo(minionPosition) < 0.1) {
+        // Particle reached the minion
+        scene.remove(particle);
+        return;
+      }
+      requestAnimationFrame(animateParticle);
+    };
+
+    animateParticle();
+    scene.add(particle);
+  };
+
   useFrame((state, delta) => {
     if (minionRef.current && path.length > 0 && pathIndexRef.current < path.length) {
       const minion = minionRef.current;
-      const speed = 1.0;
+      const speed = 2.0;
       const pathIndex = pathIndexRef.current;
       const target = path[pathIndex];
       const targetPosition = new THREE.Vector3(target.row, target.col, 0.25);
@@ -88,9 +123,15 @@ const Ground = () => {
       if (minion.position.distanceToSquared(targetPosition) < 0.01) {
         pathIndexRef.current++;
       }
-    } else if (path.length && path.length === pathIndexRef.current) {
-      // TODO: Once it reaches the end, remove it from the scene and subract heart value
-      scene.remove(minionRef.current);
+
+      // Detect minions in range and emit particles
+      towers.forEach((tower) => {
+        const towerPosition = tower.position;
+        const minionsInRange = detectMinionsInRange(towerPosition, [minion], 3.0);
+        minionsInRange.forEach((minionInRange) => {
+          emitParticleTowardsMinion(towerPosition, minionInRange.position, createFireParticle);
+        });
+      });
     }
   });
 
@@ -166,16 +207,13 @@ const Ground = () => {
         ))}
 
         {towers.map(({ position }, index) => (
-          <mesh key={index} position={[position.x, position.y, 0.25]} renderOrder={2}>
+          <mesh key={index} position={position} renderOrder={2}>
             <boxGeometry args={[0.5, 0.5, 0.5]} />
             <meshBasicMaterial color="green" />
           </mesh>
         ))}
         {temporaryTower && (
-          <mesh
-            position={[temporaryTower.position.x, temporaryTower.position.y, 0.25]}
-            renderOrder={2}
-          >
+          <mesh position={temporaryTower.position} renderOrder={2}>
             <boxGeometry args={[0.5, 0.5, 0.5]} />
             <meshBasicMaterial color="red" />
           </mesh>
