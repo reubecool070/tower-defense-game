@@ -14,10 +14,12 @@ const TOWER_RANGE = 3.0; // How far towers can detect minions
 
 // Minion constants
 const MINION_MAX_HEALTH = 100;
-const PARTICLE_DAMAGE = 1;
-const DEATH_FADE_DURATION = 1.5; // seconds for death animation
+const PARTICLE_DAMAGE = 6;
 const MINION_COUNT = 5; // Number of minions to create
 const MINION_SPAWN_DELAY = 2; // Seconds between minion spawns
+const DEATH_FADE_DURATION = 1.0; // 1 second fade-out animation
+const MINION_SPAWN_INTERVAL = 1.0; // Spawn a new minion every 3 seconds
+const MAX_ACTIVE_MINIONS = 50; // Maximum number of active minions at once
 
 export {
   DEFAULT_ROWS,
@@ -36,4 +38,6 @@ export {
   DEATH_FADE_DURATION,
   MINION_COUNT,
   MINION_SPAWN_DELAY,
+  MINION_SPAWN_INTERVAL,
+  MAX_ACTIVE_MINIONS,
 };

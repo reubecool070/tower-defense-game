@@ -18,11 +18,24 @@ import {
   TOWER_RANGE,
   PARTICLE_DAMAGE,
   MINION_MAX_HEALTH,
+  DEATH_FADE_DURATION,
+  MINION_SPAWN_INTERVAL,
+  MAX_ACTIVE_MINIONS,
 } from "../../utils/constant";
 import { TileNode, ParticleData } from "../../types";
 
-// Define death animation duration constant
-const DEATH_FADE_DURATION = 1.0; // 1 second fade-out animation
+// Interface for tracking minions
+interface Minion {
+  id: string;
+  group: THREE.Group;
+  mesh: THREE.Mesh;
+  healthBar: THREE.Group;
+  healthBarValue: THREE.Mesh;
+  pathIndex: number;
+  health: number;
+  isDying: boolean;
+  deathStartTime: number | null;
+}
 
 const Ground = () => {
   const { camera, gl, scene } = useThree();
@@ -34,29 +47,16 @@ const Ground = () => {
   const [temporaryTower, setTemporaryTower] = useState<THREE.Object3D | null>(null);
   const [towers, setTowers] = useState<THREE.Object3D[]>([]);
   const [activeParticles, setActiveParticles] = useState<ParticleData[]>([]);
-  const [minionHealth, setMinionHealth] = useState<number>(MINION_MAX_HEALTH);
-  const [isMinionDying, setIsMinionDying] = useState<boolean>(false);
-  const [minionDeathTime, setMinionDeathTime] = useState<number | null>(null);
+  const [minions, setMinions] = useState<Minion[]>([]);
 
-  // Use internal refs that we can freely assign to
-  const minionGroupInternal = useRef<THREE.Group | null>(null);
-  const minionMeshInternal = useRef<THREE.Mesh | null>(null);
-  const healthBarGroupInternal = useRef<THREE.Group | null>(null);
-  const healthBarValueInternal = useRef<THREE.Mesh | null>(null);
-
-  // Create refs that are exposed to the component
-  const minionRef = minionGroupInternal as MutableRefObject<THREE.Group | null>;
-  const minionMeshRef = minionMeshInternal as MutableRefObject<THREE.Mesh | null>;
-  const healthBarRef = healthBarGroupInternal as MutableRefObject<THREE.Group | null>;
-  const healthBarValueRef = healthBarValueInternal as MutableRefObject<THREE.Mesh | null>;
-
-  const pathIndexRef = useRef<number>(0);
+  // Ref for tracking time since last spawn
+  const lastSpawnTimeRef = useRef<number>(0);
   const raycaster = useRef(new THREE.Raycaster());
   const towerTimers = useRef<Record<string, number>>({});
   const clock = useRef(new THREE.Clock());
 
   // Function to create a health bar
-  const createHealthBar = (): THREE.Group => {
+  const createHealthBar = (): { group: THREE.Group; valueBar: THREE.Mesh } => {
     // Create container group
     const group = new THREE.Group();
 
@@ -94,35 +94,26 @@ const Ground = () => {
     // Position health bar above minion
     group.position.y = 0.4;
 
-    // Assign references directly to internal refs
-    healthBarGroupInternal.current = group;
-    healthBarValueInternal.current = valueBar;
-
-    return group;
+    return { group, valueBar };
   };
 
   // Function to update health bar display
-  const updateHealthBar = (currentHealth: number): void => {
-    if (healthBarValueRef.current) {
+  const updateHealthBar = (valueBar: THREE.Mesh, currentHealth: number): void => {
+    if (valueBar) {
       // Calculate health percentage
       const healthPercent = currentHealth / MINION_MAX_HEALTH;
 
       // Update scale and position of health bar
-      healthBarValueRef.current.scale.x = healthPercent;
-      healthBarValueRef.current.position.x = -0.3 * (1 - healthPercent);
+      valueBar.scale.x = healthPercent;
+      valueBar.position.x = -0.3 * (1 - healthPercent);
 
       // Change color based on health level
       if (healthPercent > 0.6) {
-        (healthBarValueRef.current.material as THREE.MeshBasicMaterial).color.setHex(0x00ff00); // Green
+        (valueBar.material as THREE.MeshBasicMaterial).color.setHex(0x00ff00); // Green
       } else if (healthPercent > 0.3) {
-        (healthBarValueRef.current.material as THREE.MeshBasicMaterial).color.setHex(0xffff00); // Yellow
+        (valueBar.material as THREE.MeshBasicMaterial).color.setHex(0xffff00); // Yellow
       } else {
-        (healthBarValueRef.current.material as THREE.MeshBasicMaterial).color.setHex(0xff0000); // Red
-      }
-
-      // Check if health is zero
-      if (currentHealth <= 0 && !isMinionDying) {
-        handleMinionDeath();
+        (valueBar.material as THREE.MeshBasicMaterial).color.setHex(0xff0000); // Red
       }
     }
   };
@@ -164,14 +155,17 @@ const Ground = () => {
     calculateInitialPath(tiles);
     clock.current.start();
 
-    // Reset minion health
-    setMinionHealth(MINION_MAX_HEALTH);
-
-    // Cleanup function to remove any remaining particles when component unmounts
+    // Cleanup function to remove any remaining particles and minions when component unmounts
     return () => {
       activeParticles.forEach((particle) => {
         if (particle.mesh && scene) {
           scene.remove(particle.mesh);
+        }
+      });
+
+      minions.forEach((minion) => {
+        if (minion.group && scene) {
+          scene.remove(minion.group);
         }
       });
     };
@@ -183,10 +177,6 @@ const Ground = () => {
     astar(tiles, startNode, finishNode);
     const shortestPathInOrder = getShortestPathInOrder(finishNode);
     setPath(shortestPathInOrder);
-    pathIndexRef.current = 0; // Reset path index when path is recalculated
-    if (minionRef.current) {
-      minionRef.current.position.set(START_NODE_ROW, START_NODE_COLUMN, GROUND_HEIGHT);
-    }
   };
 
   const createFireParticle = (): THREE.Mesh => {
@@ -207,10 +197,10 @@ const Ground = () => {
 
   const detectMinionsInRange = (
     towerPosition: THREE.Vector3,
-    minions: THREE.Object3D[],
+    minionObjects: THREE.Object3D[],
     range: number
   ): THREE.Object3D[] => {
-    return minions.filter((minion) => {
+    return minionObjects.filter((minion) => {
       const distance = new THREE.Vector3(
         towerPosition.x,
         towerPosition.y,
@@ -265,60 +255,120 @@ const Ground = () => {
   };
 
   // Function to handle minion death
-  const handleMinionDeath = (): void => {
-    if (!isMinionDying) {
-      setIsMinionDying(true);
-      setMinionDeathTime(clock.current.getElapsedTime());
-
-      // Play death sound or trigger other death effects here
-      console.log("Minion defeated!");
-    }
+  const handleMinionDeath = (minionId: string): void => {
+    setMinions((prevMinions) =>
+      prevMinions.map((minion) =>
+        minion.id === minionId && !minion.isDying
+          ? {
+              ...minion,
+              isDying: true,
+              deathStartTime: clock.current.getElapsedTime(),
+            }
+          : minion
+      )
+    );
+    console.log(`Minion ${minionId} defeated!`);
   };
 
-  // Function to update minion opacity during death animation
-  const updateMinionDeathAnimation = (delta: number): void => {
-    if (!isMinionDying || !minionDeathTime || !minionMeshRef.current) return;
+  // Function to create and set up a new minion
+  const spawnMinion = (): void => {
+    if (path.length === 0) return;
 
-    const currentTime = clock.current.getElapsedTime();
-    const elapsedDeathTime = currentTime - minionDeathTime;
+    // Create a new minion group
+    const minionGroup = new THREE.Group();
+    minionGroup.position.set(START_NODE_ROW, START_NODE_COLUMN, GROUND_HEIGHT);
 
-    // Calculate fade based on elapsed time
-    if (elapsedDeathTime < DEATH_FADE_DURATION) {
-      const fadeRatio = 1 - elapsedDeathTime / DEATH_FADE_DURATION;
+    // Create minion mesh
+    const minionMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.5, 0.5),
+      new THREE.MeshBasicMaterial({
+        color: 0x3366ff, // Blue
+        transparent: true,
+        opacity: 1.0,
+      })
+    );
 
-      // Update minion mesh opacity
-      if (minionMeshRef.current.material) {
-        (minionMeshRef.current.material as THREE.MeshBasicMaterial).opacity = fadeRatio;
-      }
+    // Add minion mesh to group
+    minionGroup.add(minionMesh);
 
-      // Update health bar opacity
-      if (healthBarRef.current) {
-        healthBarRef.current.children.forEach((child) => {
-          if ((child as THREE.Mesh).material) {
-            ((child as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = fadeRatio * 0.7; // Maintain original relative opacity
+    // Create and add health bar to group
+    const { group: healthBar, valueBar: healthBarValue } = createHealthBar();
+    minionGroup.add(healthBar);
+
+    // Generate unique ID for this minion
+    const minionId = `minion_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Create minion data structure
+    const newMinion: Minion = {
+      id: minionId,
+      group: minionGroup,
+      mesh: minionMesh,
+      healthBar,
+      healthBarValue,
+      pathIndex: 0,
+      health: MINION_MAX_HEALTH,
+      isDying: false,
+      deathStartTime: null,
+    };
+
+    // Add to state
+    setMinions((prevMinions) => [...prevMinions, newMinion]);
+
+    // Add to scene
+    scene.add(minionGroup);
+
+    console.log(`Spawned minion ${minionId}`);
+  };
+
+  // Update minion death animations
+  const updateMinionDeathAnimations = (delta: number): void => {
+    let minionRemovalIds: string[] = [];
+
+    setMinions((prevMinions) =>
+      prevMinions.map((minion) => {
+        if (minion.isDying && minion.deathStartTime) {
+          const currentTime = clock.current.getElapsedTime();
+          const elapsedDeathTime = currentTime - minion.deathStartTime;
+
+          if (elapsedDeathTime < DEATH_FADE_DURATION) {
+            // Update death animation
+            const fadeRatio = 1 - elapsedDeathTime / DEATH_FADE_DURATION;
+
+            // Update minion mesh opacity
+            if (minion.mesh.material) {
+              (minion.mesh.material as THREE.MeshBasicMaterial).opacity = fadeRatio;
+            }
+
+            // Update health bar opacity
+            minion.healthBar.children.forEach((child) => {
+              if ((child as THREE.Mesh).material) {
+                ((child as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity =
+                  fadeRatio * 0.7;
+              }
+            });
+
+            // Add wobble or sink effect
+            minion.group.position.y += Math.sin(elapsedDeathTime * 10) * 0.01;
+            minion.group.position.z -= 0.2 * delta;
+            minion.group.rotation.z = Math.sin(elapsedDeathTime * 3) * 0.2;
+
+            return minion;
+          } else {
+            // Death animation complete, mark for removal
+            minionRemovalIds.push(minion.id);
+            scene.remove(minion.group);
+            return minion;
           }
-        });
-      }
+        }
+        return minion;
+      })
+    );
 
-      // Optional: add wobble or sink effect
-      if (minionRef.current) {
-        minionRef.current.position.y += Math.sin(elapsedDeathTime * 10) * 0.01;
-        minionRef.current.position.z -= 0.2 * delta; // Sink into ground
-        minionRef.current.rotation.z = Math.sin(elapsedDeathTime * 3) * 0.2; // Wobble
-      }
-    } else {
-      // Death animation complete, remove minion from scene
-      if (minionRef.current && scene) {
-        scene.remove(minionRef.current);
-
-        // Reset state after death
-        setIsMinionDying(false);
-        setMinionHealth(MINION_MAX_HEALTH);
-        setMinionDeathTime(null);
-
-        // Respawn minion
-        setupMinion();
-      }
+    // Remove dead minions
+    if (minionRemovalIds.length > 0) {
+      setMinions((prevMinions) =>
+        prevMinions.filter((minion) => !minionRemovalIds.includes(minion.id))
+      );
     }
   };
 
@@ -327,6 +377,7 @@ const Ground = () => {
     if (activeParticles.length === 0) return;
 
     const particlesToRemove: string[] = [];
+    const minionsHit: { id: string; damage: number }[] = [];
 
     activeParticles.forEach((particle) => {
       // Move particle
@@ -342,13 +393,11 @@ const Ground = () => {
           particlesToRemove.push(particle.id);
           scene.remove(particle.mesh);
 
-          // Handle damage or effects here
-          if (!isMinionDying) {
-            setMinionHealth((current) => {
-              const newHealth = Math.max(0, current - PARTICLE_DAMAGE);
-              updateHealthBar(newHealth);
-              return newHealth;
-            });
+          // Find which minion was hit
+          const hitMinionId = minions.find((m) => m.group === particle.target)?.id;
+
+          if (hitMinionId) {
+            minionsHit.push({ id: hitMinionId, damage: PARTICLE_DAMAGE });
           }
         }
       }
@@ -361,6 +410,30 @@ const Ground = () => {
       }
     });
 
+    // Apply damage to hit minions
+    if (minionsHit.length > 0) {
+      setMinions((prevMinions) =>
+        prevMinions.map((minion) => {
+          const hitInfo = minionsHit.find((hit) => hit.id === minion.id);
+          if (hitInfo && !minion.isDying) {
+            const newHealth = Math.max(0, minion.health - hitInfo.damage);
+            updateHealthBar(minion.healthBarValue, newHealth);
+
+            // Check for death
+            if (newHealth <= 0 && !minion.isDying) {
+              handleMinionDeath(minion.id);
+            }
+
+            return {
+              ...minion,
+              health: newHealth,
+            };
+          }
+          return minion;
+        })
+      );
+    }
+
     // Remove processed particles from active list
     if (particlesToRemove.length > 0) {
       setActiveParticles((prev) => prev.filter((p) => !particlesToRemove.includes(p.id)));
@@ -368,61 +441,82 @@ const Ground = () => {
   };
 
   useFrame((state, delta) => {
-    // Update minion death animation
-    updateMinionDeathAnimation(delta);
+    const currentTime = clock.current.getElapsedTime();
 
-    // Update minion movement (only if not dying)
-    if (
-      minionRef.current &&
-      path.length > 0 &&
-      pathIndexRef.current < path.length &&
-      !isMinionDying
-    ) {
-      const minion = minionRef.current;
-      const speed = 2.0;
-      const pathIndex = pathIndexRef.current;
-      const target = path[pathIndex];
-      const targetPosition = new THREE.Vector3(target.row, target.col, GROUND_HEIGHT);
-      const direction = targetPosition.clone().sub(minion.position).normalize();
-      minion.position.add(direction.multiplyScalar(delta * speed));
-
-      // Update health bar to face the camera
-      if (healthBarRef.current) {
-        healthBarRef.current.quaternion.copy(camera.quaternion);
+    // Handle minion spawning
+    if (currentTime - lastSpawnTimeRef.current > MINION_SPAWN_INTERVAL) {
+      // Only spawn if we're under the maximum active minions
+      const activeCount = minions.filter((m) => !m.isDying).length;
+      if (activeCount < MAX_ACTIVE_MINIONS) {
+        spawnMinion();
       }
+      lastSpawnTimeRef.current = currentTime;
+    }
 
-      if (minion.position.distanceToSquared(targetPosition) < GROUND_Z_OFFSET) {
-        pathIndexRef.current++;
+    // Update minion death animations
+    updateMinionDeathAnimations(delta);
 
-        // If reached end of path, log message and remove from scene
-        if (pathIndexRef.current >= path.length) {
-          console.log("Minion reached the destination!");
+    // Update minion movement
+    minions.forEach((minion) => {
+      if (!minion.isDying && path.length > 0 && minion.pathIndex < path.length) {
+        const minionGroup = minion.group;
+        const speed = 2.0;
+        const target = path[minion.pathIndex];
+        const targetPosition = new THREE.Vector3(target.row, target.col, GROUND_HEIGHT);
+        const direction = targetPosition.clone().sub(minionGroup.position).normalize();
+        minionGroup.position.add(direction.multiplyScalar(delta * speed));
 
-          // Remove minion from scene
-          scene.remove(minion);
+        // Update health bar to face the camera
+        minion.healthBar.quaternion.copy(camera.quaternion);
 
-          // Reset for future use if needed
-          minionGroupInternal.current = null;
-          minionMeshInternal.current = null;
+        if (minionGroup.position.distanceToSquared(targetPosition) < GROUND_Z_OFFSET) {
+          // Update this minion's path index
+          setMinions((prevMinions) =>
+            prevMinions.map((m) => {
+              if (m.id === minion.id) {
+                const newPathIndex = m.pathIndex + 1;
+
+                // If reached end of path
+                if (newPathIndex >= path.length) {
+                  console.log(`Minion ${m.id} reached the destination!`);
+                  scene.remove(m.group);
+                  return {
+                    ...m,
+                    pathIndex: newPathIndex,
+                  };
+                }
+
+                return {
+                  ...m,
+                  pathIndex: newPathIndex,
+                };
+              }
+              return m;
+            })
+          );
         }
       }
+    });
 
-      // Process tower targeting and firing
-      if (minionHealth > 0) {
-        // Only target living minions
-        towers.forEach((tower, index) => {
-          const towerId = `tower_${index}`;
-          const towerPosition = tower.position.clone();
-          towerPosition.z = GROUND_HEIGHT;
-          const minionsInRange = detectMinionsInRange(towerPosition, [minion], TOWER_RANGE);
+    // Clean up minions that have reached the destination
+    setMinions((prevMinions) => prevMinions.filter((minion) => minion.pathIndex < path.length));
 
-          if (minionsInRange.length > 0) {
-            // Fire at first minion in range if cooldown allows
-            fireParticleFromTower(towerId, towerPosition, minionsInRange[0]);
-          }
-        });
+    // Process tower targeting and firing
+    towers.forEach((tower, index) => {
+      const towerId = `tower_${index}`;
+      const towerPosition = tower.position.clone();
+      towerPosition.z = GROUND_HEIGHT;
+
+      // Get all active minion groups
+      const minionGroups = minions.filter((m) => !m.isDying && m.health > 0).map((m) => m.group);
+
+      const minionsInRange = detectMinionsInRange(towerPosition, minionGroups, TOWER_RANGE);
+
+      if (minionsInRange.length > 0) {
+        // Fire at first minion in range if cooldown allows
+        fireParticleFromTower(towerId, towerPosition, minionsInRange[0]);
       }
-    }
+    });
 
     // Update particles
     updateParticles(delta);
@@ -448,26 +542,30 @@ const Ground = () => {
       const _grids = resetTilesGrid();
       _grids[temporaryTower.position.x][temporaryTower.position.y].isTower = true;
 
-      if (minionRef.current) {
-        const currentMinionPos = minionRef.current.position;
-        const currentRow = Math.round(currentMinionPos.x);
-        const currentCol = Math.round(currentMinionPos.y);
-        const newStartNode = _grids[currentRow][currentCol];
-        const finishNode = _grids[FINISH_NODE_ROW][FINISH_NODE_COLUMN];
+      // Check if placing the tower would block the path
+      const startNode = _grids[START_NODE_ROW][START_NODE_COLUMN];
+      const finishNode = _grids[FINISH_NODE_ROW][FINISH_NODE_COLUMN];
 
-        astar(_grids, newStartNode, finishNode);
-        const shortestPathInOrder = getShortestPathInOrder(finishNode);
+      astar(_grids, startNode, finishNode);
+      const shortestPathInOrder = getShortestPathInOrder(finishNode);
 
-        if (shortestPathInOrder.length > 1) {
-          removeClickableObj(temporaryTower);
-          setTilesGrid(_grids);
-          setTowers([...towers, temporaryTower]);
-          pathIndexRef.current = 0;
-          setPath(shortestPathInOrder);
-          setTemporaryTower(null);
-        } else {
-          console.warn("Placing this tower will block the path. Try another position.");
-        }
+      if (shortestPathInOrder.length > 1) {
+        removeClickableObj(temporaryTower);
+        setTilesGrid(_grids);
+        setTowers([...towers, temporaryTower]);
+        setPath(shortestPathInOrder);
+        setTemporaryTower(null);
+
+        // Update all minion paths
+        setMinions((prevMinions) =>
+          prevMinions.map((minion) => ({
+            ...minion,
+            // Keep current progress on path
+            pathIndex: Math.min(minion.pathIndex, shortestPathInOrder.length - 1),
+          }))
+        );
+      } else {
+        console.warn("Placing this tower will block the path. Try another position.");
       }
     }
   };
@@ -532,45 +630,6 @@ const Ground = () => {
 
     return group;
   };
-
-  // Function to create and set up minion
-  const setupMinion = (): void => {
-    // Create a new minion group
-    const minionGroup = new THREE.Group();
-    minionGroup.position.set(START_NODE_ROW, START_NODE_COLUMN, GROUND_HEIGHT);
-
-    // Create minion mesh
-    const minionMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.5, 0.5, 0.5),
-      new THREE.MeshBasicMaterial({
-        color: 0x3366ff, // Blue
-        transparent: true,
-        opacity: 1.0,
-      })
-    );
-
-    // Add minion mesh to group
-    minionGroup.add(minionMesh);
-
-    // Create and add health bar to group
-    const healthBar = createHealthBar();
-    minionGroup.add(healthBar);
-
-    // Assign to internal refs
-    minionGroupInternal.current = minionGroup;
-    minionMeshInternal.current = minionMesh;
-
-    // Reset path index
-    pathIndexRef.current = 0;
-
-    // Add minion group to scene
-    scene.add(minionGroup);
-  };
-
-  // Setup effect to create minion and health bar once on initial render
-  useEffect(() => {
-    setupMinion();
-  }, []);
 
   return (
     <>
