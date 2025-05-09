@@ -1,12 +1,17 @@
+import { TileNode } from "../types";
+
 // Performs A* algorithm; returns *all* nodes in the order
 // in which they were visited. Also makes nodes point back to their
 // previous node, effectively allowing us to compute the shortest path
 // by backtracking from the finish node.
-export const astar = (grid, startNode, finishNode) => {
-  if (!grid.length || !startNode || !finishNode || startNode === finishNode)
-    return;
+export const astar = (
+  grid: TileNode[][],
+  startNode: TileNode,
+  finishNode: TileNode
+): TileNode[] | undefined => {
+  if (!grid.length || !startNode || !finishNode || startNode === finishNode) return undefined;
 
-  const visitedNodesInOrder = [];
+  const visitedNodesInOrder: TileNode[] = [];
   startNode.distance = 0;
   startNode.totalDistance = heuristic(startNode, finishNode);
   const unvisitedNodes = getAllNodes(grid);
@@ -15,7 +20,7 @@ export const astar = (grid, startNode, finishNode) => {
     // Sort nodes by total distance (distance + heuristic)
     sortNodesByTotalDistance(unvisitedNodes);
     // Extract the first node
-    const closestNode = unvisitedNodes.shift();
+    const closestNode = unvisitedNodes.shift()!;
     // If we encounter a wall, we skip it.
     if (closestNode.isTower) continue;
     // Stops if the closest node's distance is infinity.
@@ -26,10 +31,12 @@ export const astar = (grid, startNode, finishNode) => {
     if (closestNode === finishNode) return visitedNodesInOrder;
     updateUnvisitedNeighbors(closestNode, grid, finishNode);
   }
+
+  return visitedNodesInOrder;
 };
 
-const getAllNodes = (grid) => {
-  const nodes = [];
+const getAllNodes = (grid: TileNode[][]): TileNode[] => {
+  const nodes: TileNode[] = [];
   for (const row of grid) {
     for (const node of row) {
       nodes.push(node);
@@ -38,11 +45,15 @@ const getAllNodes = (grid) => {
   return nodes;
 };
 
-const sortNodesByTotalDistance = (unvisitedNodes) => {
+const sortNodesByTotalDistance = (unvisitedNodes: TileNode[]): void => {
   unvisitedNodes.sort((a, b) => a.totalDistance - b.totalDistance);
 };
 
-const updateUnvisitedNeighbors = (closestNode, grid, finishNode) => {
+const updateUnvisitedNeighbors = (
+  closestNode: TileNode,
+  grid: TileNode[][],
+  finishNode: TileNode
+): void => {
   const unvisitedNeighbors = getUnvisitedNeighbors(closestNode, grid);
   for (const neighbor of unvisitedNeighbors) {
     const distance = closestNode.distance + 1;
@@ -54,8 +65,8 @@ const updateUnvisitedNeighbors = (closestNode, grid, finishNode) => {
   }
 };
 
-const getUnvisitedNeighbors = (node, grid) => {
-  const neighbors = [];
+const getUnvisitedNeighbors = (node: TileNode, grid: TileNode[][]): TileNode[] => {
+  const neighbors: TileNode[] = [];
   const { col, row } = node;
 
   // Check if there's a node above the current node
@@ -75,15 +86,15 @@ const getUnvisitedNeighbors = (node, grid) => {
 };
 
 // Manhattan distance heuristic
-const heuristic = (node, finishNode) => {
+const heuristic = (node: TileNode, finishNode: TileNode): number => {
   const dx = Math.abs(node.col - finishNode.col);
   const dy = Math.abs(node.row - finishNode.row);
   return dx + dy;
 };
 
-export const getShortestPathInOrder = (finishNode) => {
-  let currentNode = finishNode;
-  const nodesInShortestPathOrder = [];
+export const getShortestPathInOrder = (finishNode: TileNode): TileNode[] => {
+  let currentNode: TileNode | null = finishNode;
+  const nodesInShortestPathOrder: TileNode[] = [];
 
   // Continue until there are no more previous nodes
   while (currentNode !== null) {

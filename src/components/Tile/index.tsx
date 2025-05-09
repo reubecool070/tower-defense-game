@@ -1,8 +1,15 @@
 import { Plane, useTexture, shaderMaterial } from "@react-three/drei";
-import { useThree, extend } from "@react-three/fiber";
+import { useThree, extend, ThreeEvent } from "@react-three/fiber";
 import { useEffect, useRef, useMemo } from "react";
 import * as THREE from "three";
 import { useGameStore } from "../../store";
+import { TileProps } from "../../types";
+
+interface TileShaderMaterialProps {
+  uTexture1: THREE.Texture | null;
+  uTexture2: THREE.Texture | null;
+  uMixRatio: number;
+}
 
 const TileShaderMaterial = shaderMaterial(
   { uTexture1: null, uTexture2: null, uMixRatio: 0.5 },
@@ -24,15 +31,26 @@ const TileShaderMaterial = shaderMaterial(
 
 extend({ TileShaderMaterial });
 
-// eslint-disable-next-line react/prop-types
-const Tile = ({ position, startNode, finishNode, rest }) => {
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      tileShaderMaterial: TileShaderMaterialProps & JSX.IntrinsicElements["shaderMaterial"];
+    }
+  }
+}
+
+interface TileControls extends THREE.EventDispatcher {
+  fitToBox: (box: THREE.Object3D, focus?: boolean, options?: any) => void;
+  truckSpeed: number;
+}
+
+const Tile = ({ position, startNode, finishNode, rest }: TileProps) => {
   const texture1 = useTexture("textures/grass.jpg");
   const texture2 = useTexture("textures/grass-1.jpg");
   const texture3 = useTexture("textures/ground-3.jpg");
-  const midTileRef = useRef();
-  const tileRef = useRef();
-  const controls = useThree((s) => s.controls);
-  // const scene = useThree((s) => s.scene);
+  const midTileRef = useRef<THREE.Mesh>(null);
+  const tileRef = useRef<THREE.Mesh>(null);
+  const controls = useThree((s) => s.controls) as unknown as TileControls;
   const addClickableObjs = useGameStore((s) => s.addClickableObjs);
 
   // Function to reset the camera
@@ -53,7 +71,7 @@ const Tile = ({ position, startNode, finishNode, rest }) => {
     resetCamera();
   }, [midTileRef.current, controls]);
 
-  const materialRef = useRef();
+  const materialRef = useRef<THREE.ShaderMaterial>(null);
   const mixRatio = useMemo(() => Math.random(), []);
 
   useEffect(() => {
@@ -69,7 +87,6 @@ const Tile = ({ position, startNode, finishNode, rest }) => {
       position={position}
       receiveShadow
       name={`plane-${position[0]}-${position[1]}`}
-      // onPointerMove={(ev) => console.log(ev)}
       userData={rest}
     >
       <tileShaderMaterial
