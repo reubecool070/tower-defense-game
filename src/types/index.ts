@@ -57,9 +57,24 @@ export interface ParticleData {
   createdAt: number;
 }
 
+export interface GameStats {
+  score: number;
+  lives: number;
+  waveNumber: number;
+  totalMinions: number;
+  gameOver: boolean;
+}
+
 export interface GameStore {
   clickableObjs: Set<THREE.Object3D>;
   addClickableObjs: (obj: THREE.Object3D) => void;
   removeAllObjects: () => void;
   removeClickableObj: (obj: THREE.Object3D) => void;
+  // Game stats
+  gameStats: GameStats;
+  increaseScore: () => void;
+  decreaseLives: () => void;
+  increaseTotalMinions: () => void;
+  setGameOver: (isOver: boolean) => void;
+  resetGameStats: () => void;
 }

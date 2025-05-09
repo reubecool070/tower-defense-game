@@ -39,8 +39,14 @@ interface Minion {
 
 const Ground = () => {
   const { camera, gl, scene } = useThree();
+
+  // Game store access
   const clickableObjs = useGameStore((s) => s.clickableObjs);
   const removeClickableObj = useGameStore((s) => s.removeClickableObj);
+  const increaseScore = useGameStore((s) => s.increaseScore);
+  const decreaseLives = useGameStore((s) => s.decreaseLives);
+  const increaseTotalMinions = useGameStore((s) => s.increaseTotalMinions);
+  const gameOver = useGameStore((s) => s.gameStats.gameOver);
 
   const [tilesGrid, setTilesGrid] = useState<TileNode[][]>([]);
   const [path, setPath] = useState<TileNode[]>([]);
@@ -267,7 +273,11 @@ const Ground = () => {
           : minion
       )
     );
-    console.log(`Minion ${minionId} defeated!`);
+
+    // Increase score using the game store
+    increaseScore();
+
+    console.log(`Minion ${minionId} defeated! +1 Score`);
   };
 
   // Function to create and set up a new minion
@@ -310,6 +320,9 @@ const Ground = () => {
       isDying: false,
       deathStartTime: null,
     };
+
+    // Track total minions in game store
+    increaseTotalMinions();
 
     // Add to state
     setMinions((prevMinions) => [...prevMinions, newMinion]);
@@ -443,14 +456,17 @@ const Ground = () => {
   useFrame((state, delta) => {
     const currentTime = clock.current.getElapsedTime();
 
-    // Handle minion spawning
-    if (currentTime - lastSpawnTimeRef.current > MINION_SPAWN_INTERVAL) {
-      // Only spawn if we're under the maximum active minions
-      const activeCount = minions.filter((m) => !m.isDying).length;
-      if (activeCount < MAX_ACTIVE_MINIONS) {
-        spawnMinion();
+    // Only spawn new minions if game is not over
+    if (!gameOver) {
+      // Handle minion spawning
+      if (currentTime - lastSpawnTimeRef.current > MINION_SPAWN_INTERVAL) {
+        // Only spawn if we're under the maximum active minions
+        const activeCount = minions.filter((m) => !m.isDying).length;
+        if (activeCount < MAX_ACTIVE_MINIONS) {
+          spawnMinion();
+        }
+        lastSpawnTimeRef.current = currentTime;
       }
-      lastSpawnTimeRef.current = currentTime;
     }
 
     // Update minion death animations
@@ -478,7 +494,11 @@ const Ground = () => {
 
                 // If reached end of path
                 if (newPathIndex >= path.length) {
-                  console.log(`Minion ${m.id} reached the destination!`);
+                  console.log(`Minion ${m.id} reached the destination! -1 Life`);
+
+                  // Reduce player lives using game store
+                  decreaseLives();
+
                   scene.remove(m.group);
                   return {
                     ...m,
