@@ -46,6 +46,7 @@ const Ground = () => {
   const [towers, setTowers] = useState<THREE.Object3D[]>([]);
   const [activeParticles, setActiveParticles] = useState<ParticleData[]>([]);
   const [minions, setMinions] = useState<Minion[]>([]);
+  const [isValidPlacement, setIsValidPlacement] = useState<boolean>(true);
 
   // Ref for tracking time since last spawn
   const lastSpawnTimeRef = useRef<number>(0);
@@ -520,20 +521,67 @@ const Ground = () => {
     // Update minion death animations
     updateMinionDeathAnimations(delta);
 
-    // Update minion movement
+    // Update minion movement - Fixed to prevent diagonal movements
     minions.forEach((minion) => {
       if (!minion.isDying && path.length > 0 && minion.pathIndex < path.length) {
         const minionGroup = minion.group;
         const speed = 2.0;
         const target = path[minion.pathIndex];
         const targetPosition = new THREE.Vector3(target.row, target.col, GROUND_HEIGHT);
-        const direction = targetPosition.clone().sub(minionGroup.position).normalize();
-        minionGroup.position.add(direction.multiplyScalar(delta * speed));
+
+        // Calculate distance to target
+        const distanceToTarget = minionGroup.position.distanceTo(targetPosition);
+
+        // Only move if we're not already very close to the target
+        if (distanceToTarget > GROUND_Z_OFFSET) {
+          // Only move in cardinal directions (no diagonals)
+          // First determine if we should move along x or y axis
+          const dx = Math.abs(targetPosition.x - minionGroup.position.x);
+          const dy = Math.abs(targetPosition.y - minionGroup.position.y);
+
+          // Move along the axis with larger distance first
+          const direction = new THREE.Vector3(0, 0, 0);
+
+          if (dx > dy) {
+            // Move horizontally first
+            if (targetPosition.x > minionGroup.position.x) {
+              direction.x = 1;
+            } else if (targetPosition.x < minionGroup.position.x) {
+              direction.x = -1;
+            }
+          } else {
+            // Move vertically first
+            if (targetPosition.y > minionGroup.position.y) {
+              direction.y = 1;
+            } else if (targetPosition.y < minionGroup.position.y) {
+              direction.y = -1;
+            }
+          }
+
+          // Apply movement
+          minionGroup.position.add(direction.normalize().multiplyScalar(delta * speed));
+
+          // Ensure we don't overshoot the target
+          if (
+            (direction.x > 0 && minionGroup.position.x > targetPosition.x) ||
+            (direction.x < 0 && minionGroup.position.x < targetPosition.x)
+          ) {
+            minionGroup.position.x = targetPosition.x;
+          }
+
+          if (
+            (direction.y > 0 && minionGroup.position.y > targetPosition.y) ||
+            (direction.y < 0 && minionGroup.position.y < targetPosition.y)
+          ) {
+            minionGroup.position.y = targetPosition.y;
+          }
+        }
 
         // Update health bar to face the camera
         minion.healthBar.quaternion.copy(camera.quaternion);
 
-        if (minionGroup.position.distanceToSquared(targetPosition) < GROUND_Z_OFFSET) {
+        // Check if we've reached the current target node
+        if (minionGroup.position.distanceTo(targetPosition) < GROUND_Z_OFFSET) {
           // Update this minion's path index
           setMinions((prevMinions) =>
             prevMinions.map((m) => {
@@ -602,11 +650,52 @@ const Ground = () => {
     if (intersects.length > 0) {
       const obj = intersects[0].object;
       setTemporaryTower(obj);
+
+      // Check if placement is valid at this position
+      const towerX = obj.position.x;
+      const towerY = obj.position.y;
+
+      // Check for minions on this tile
+      const minionOnTile = minions.some((minion) => {
+        const minionPos = minion.group.position;
+        return Math.abs(minionPos.x - towerX) < 0.5 && Math.abs(minionPos.y - towerY) < 0.5;
+      });
+
+      // Check if placing the tower would block the path
+      const _grids = resetTilesGrid();
+      _grids[towerX][towerY].isTower = true;
+
+      const startNode = _grids[START_NODE_ROW][START_NODE_COLUMN];
+      const finishNode = _grids[FINISH_NODE_ROW][FINISH_NODE_COLUMN];
+
+      astar(_grids, startNode, finishNode);
+      const shortestPathInOrder = getShortestPathInOrder(finishNode);
+
+      // Position is valid if: no minion on tile AND valid path exists
+      const isValid = !minionOnTile && shortestPathInOrder.length > 1;
+      setIsValidPlacement(isValid);
     }
   };
 
   const handlePointerUp = (): void => {
     if (temporaryTower) {
+      // Check if there are any minions on this tile
+      const towerX = temporaryTower.position.x;
+      const towerY = temporaryTower.position.y;
+
+      // Check if any minion is on or very close to this tile
+      const minionOnTile = minions.some((minion) => {
+        const minionPos = minion.group.position;
+        // Use a small threshold to check if minion is on this tile
+        return Math.abs(minionPos.x - towerX) < 0.5 && Math.abs(minionPos.y - towerY) < 0.5;
+      });
+
+      if (minionOnTile) {
+        // Can't place tower here because a minion is on this tile
+        console.warn("Cannot place tower here - a minion is occupying this tile!");
+        return;
+      }
+
       const _grids = resetTilesGrid();
       _grids[temporaryTower.position.x][temporaryTower.position.y].isTower = true;
 
@@ -624,13 +713,34 @@ const Ground = () => {
         setPath(shortestPathInOrder);
         setTemporaryTower(null);
 
-        // Update all minion paths
+        // Properly redirect all active minions to the new path
         setMinions((prevMinions) =>
-          prevMinions.map((minion) => ({
-            ...minion,
-            // Keep current progress on path
-            pathIndex: Math.min(minion.pathIndex, shortestPathInOrder.length - 1),
-          }))
+          prevMinions.map((minion) => {
+            if (minion.isDying) return minion;
+
+            // Find the closest point on the new path for this minion
+            const currentPosition = minion.group.position;
+            let closestPathIndex = 0;
+            let minDistance = Infinity;
+
+            shortestPathInOrder.forEach((node, index) => {
+              const distance = Math.sqrt(
+                Math.pow(node.row - currentPosition.x, 2) +
+                  Math.pow(node.col - currentPosition.y, 2)
+              );
+
+              if (distance < minDistance) {
+                minDistance = distance;
+                closestPathIndex = index;
+              }
+            });
+
+            return {
+              ...minion,
+              // Set to the closest path point or keep current index if it's valid
+              pathIndex: Math.min(closestPathIndex, shortestPathInOrder.length - 1),
+            };
+          })
         );
       } else {
         console.warn("Placing this tower will block the path. Try another position.");
@@ -732,7 +842,7 @@ const Ground = () => {
               renderOrder={2}
             >
               <boxGeometry args={[0.5, 0.5, 0.5]} />
-              <meshBasicMaterial color="red" />
+              <meshBasicMaterial color={isValidPlacement ? "green" : "red"} />
             </mesh>
             {/* Add range indicator for temporary tower too */}
             <primitive
