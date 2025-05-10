@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Tile from "../Tile";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
@@ -187,17 +187,28 @@ const Ground = () => {
     }
   };
 
+  const handleKeyPress = useCallback(
+    (event: KeyboardEvent) => {
+      if (event.key === " ") {
+        setPaused(!isPaused);
+      }
+    },
+    [isPaused]
+  );
+
   useEffect(() => {
     gl.domElement.addEventListener("mousemove", handlePointerMove);
     gl.domElement.addEventListener("mousedown", handlePointerMove);
     gl.domElement.addEventListener("mouseup", handlePointerUp);
+    document.addEventListener("keypress", handleKeyPress);
 
     return () => {
       gl.domElement.removeEventListener("mousemove", handlePointerMove);
       gl.domElement.removeEventListener("mousedown", handlePointerMove);
       gl.domElement.removeEventListener("mouseup", handlePointerUp);
+      document.removeEventListener("keypress", handleKeyPress);
     };
-  }, [temporaryTower, clickableObjs]);
+  }, [temporaryTower, clickableObjs, isPaused]);
 
   useFrame((state, delta) => {
     // If game is paused, don't update anything
