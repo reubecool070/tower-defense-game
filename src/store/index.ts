@@ -26,6 +26,10 @@ export interface GameStore {
   // Wave management
   advanceToNextWave: () => void;
   checkWaveCompletion: () => boolean;
+  // Pause functionality
+  isPaused: boolean;
+  togglePause: () => void;
+  setPaused: (paused: boolean) => void;
 }
 
 // Default game stats
@@ -157,4 +161,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     return false;
   },
+
+  // Pause functionality
+  isPaused: false,
+  togglePause: () => set((state) => ({ isPaused: !state.isPaused })),
+  setPaused: (paused: boolean) => set({ isPaused: paused }),
 }));

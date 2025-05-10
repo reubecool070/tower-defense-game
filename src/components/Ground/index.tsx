@@ -37,6 +37,8 @@ const Ground = () => {
   const checkWaveCompletion = useGameStore((s) => s.checkWaveCompletion);
   const advanceToNextWave = useGameStore((s) => s.advanceToNextWave);
   const gameStats = useGameStore((s) => s.gameStats);
+  const isPaused = useGameStore((s) => s.isPaused);
+  const setPaused = useGameStore((s) => s.setPaused);
 
   const [tilesGrid, setTilesGrid] = useState<TileNode[][]>([]);
   const [path, setPath] = useState<TileNode[]>([]);
@@ -156,6 +158,17 @@ const Ground = () => {
       `Starting Wave ${gameStats.waveNumber} - Spawning ${gameStats.totalMinions} minions`
     );
 
+    // Setup visibility change detection
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Tab is hidden, pause the game
+        setPaused(true);
+      }
+    };
+
+    // Add event listener for visibility change
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     // Cleanup function to remove any remaining particles and minions when component unmounts
     return () => {
       activeParticles.forEach((particle) => {
@@ -169,6 +182,9 @@ const Ground = () => {
           scene.remove(minion.group);
         }
       });
+
+      // Remove visibility change listener
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 
@@ -474,6 +490,9 @@ const Ground = () => {
   };
 
   useFrame((state, delta) => {
+    // If game is paused, don't update anything
+    if (isPaused) return;
+
     const currentTime = clock.current.getElapsedTime();
 
     // Only spawn new minions if:

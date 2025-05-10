@@ -9,6 +9,8 @@ import { useGameStore } from "./store";
 const GameStatsDisplay = () => {
   const gameStats = useGameStore((state) => state.gameStats);
   const resetGameStats = useGameStore((state) => state.resetGameStats);
+  const isPaused = useGameStore((state) => state.isPaused);
+  const togglePause = useGameStore((state) => state.togglePause);
 
   // Handle reset game button click
   const handleReset = () => {
@@ -38,6 +40,22 @@ const GameStatsDisplay = () => {
       <div>
         Minions: {gameStats.minionsSpawned}/{gameStats.totalMinions}
       </div>
+
+      <button
+        onClick={togglePause}
+        style={{
+          marginTop: "10px",
+          background: isPaused ? "#4cd137" : "#718093",
+          border: "none",
+          borderRadius: "3px",
+          padding: "5px 10px",
+          color: "white",
+          cursor: "pointer",
+          width: "100%",
+        }}
+      >
+        {isPaused ? "Resume Game" : "Pause Game"}
+      </button>
 
       {gameStats.gameOver && (
         <div style={{ color: "red", fontWeight: "bold", marginTop: "10px" }}>
