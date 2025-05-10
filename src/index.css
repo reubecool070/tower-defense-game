@@ -6,3 +6,11 @@ html,
   height: 100%;
   overflow: hidden;
 }
+
+.bottom-right {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  top: auto !important;
+  left: auto !important;
+}

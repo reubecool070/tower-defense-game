@@ -62,19 +62,21 @@ export interface GameStats {
   lives: number;
   waveNumber: number;
   totalMinions: number;
+  minionsSpawned: number;
+  minionsDefeated: number;
+  minionsLeaked: number;
   gameOver: boolean;
+  victory: boolean;
 }
 
-export interface GameStore {
-  clickableObjs: Set<THREE.Object3D>;
-  addClickableObjs: (obj: THREE.Object3D) => void;
-  removeAllObjects: () => void;
-  removeClickableObj: (obj: THREE.Object3D) => void;
-  // Game stats
-  gameStats: GameStats;
-  increaseScore: () => void;
-  decreaseLives: () => void;
-  increaseTotalMinions: () => void;
-  setGameOver: (isOver: boolean) => void;
-  resetGameStats: () => void;
+export interface Minion {
+  id: string;
+  group: THREE.Group;
+  mesh: THREE.Mesh;
+  healthBar: THREE.Group;
+  healthBarValue: THREE.Mesh;
+  pathIndex: number;
+  health: number;
+  isDying: boolean;
+  deathStartTime: number | null;
 }

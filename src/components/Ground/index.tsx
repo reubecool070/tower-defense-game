@@ -22,21 +22,9 @@ import {
   MINION_SPAWN_INTERVAL,
   MAX_ACTIVE_MINIONS,
 } from "../../utils/constant";
-import { TileNode, ParticleData } from "../../types";
+import { TileNode, ParticleData, Minion } from "../../types";
 
 // Interface for tracking minions
-interface Minion {
-  id: string;
-  group: THREE.Group;
-  mesh: THREE.Mesh;
-  healthBar: THREE.Group;
-  healthBarValue: THREE.Mesh;
-  pathIndex: number;
-  health: number;
-  isDying: boolean;
-  deathStartTime: number | null;
-}
-
 const Ground = () => {
   const { camera, gl, scene } = useThree();
 
@@ -46,7 +34,9 @@ const Ground = () => {
   const increaseScore = useGameStore((s) => s.increaseScore);
   const decreaseLives = useGameStore((s) => s.decreaseLives);
   const increaseTotalMinions = useGameStore((s) => s.increaseTotalMinions);
-  const gameOver = useGameStore((s) => s.gameStats.gameOver);
+  const checkWaveCompletion = useGameStore((s) => s.checkWaveCompletion);
+  const advanceToNextWave = useGameStore((s) => s.advanceToNextWave);
+  const gameStats = useGameStore((s) => s.gameStats);
 
   const [tilesGrid, setTilesGrid] = useState<TileNode[][]>([]);
   const [path, setPath] = useState<TileNode[]>([]);
@@ -60,6 +50,7 @@ const Ground = () => {
   const raycaster = useRef(new THREE.Raycaster());
   const towerTimers = useRef<Record<string, number>>({});
   const clock = useRef(new THREE.Clock());
+  const waveCompletionCheckedRef = useRef<boolean>(false);
 
   // Function to create a health bar
   const createHealthBar = (): { group: THREE.Group; valueBar: THREE.Mesh } => {
@@ -161,6 +152,10 @@ const Ground = () => {
     calculateInitialPath(tiles);
     clock.current.start();
 
+    console.log(
+      `Starting Wave ${gameStats.waveNumber} - Spawning ${gameStats.totalMinions} minions`
+    );
+
     // Cleanup function to remove any remaining particles and minions when component unmounts
     return () => {
       activeParticles.forEach((particle) => {
@@ -176,6 +171,12 @@ const Ground = () => {
       });
     };
   }, []);
+
+  // Reset wave completion check when wave changes
+  useEffect(() => {
+    waveCompletionCheckedRef.current = false;
+    console.log(`Wave ${gameStats.waveNumber} - Spawning ${gameStats.totalMinions} minions`);
+  }, [gameStats.waveNumber]);
 
   const calculateInitialPath = (tiles: TileNode[][]): void => {
     const startNode = tiles[START_NODE_ROW][START_NODE_COLUMN];
@@ -330,7 +331,9 @@ const Ground = () => {
     // Add to scene
     scene.add(minionGroup);
 
-    console.log(`Spawned minion ${minionId}`);
+    console.log(
+      `Spawned minion ${minionId} (${gameStats.minionsSpawned + 1}/${gameStats.totalMinions})`
+    );
   };
 
   // Update minion death animations
@@ -453,11 +456,34 @@ const Ground = () => {
     }
   };
 
+  // Check if wave is complete and handle accordingly
+  const checkAndHandleWaveCompletion = () => {
+    // Only check if we haven't already checked for this wave
+    if (!waveCompletionCheckedRef.current) {
+      const isWaveComplete = checkWaveCompletion();
+
+      if (isWaveComplete) {
+        waveCompletionCheckedRef.current = true;
+
+        // Delay advancing to next wave to allow time for animations and UI to update
+        setTimeout(() => {
+          advanceToNextWave();
+        }, 3000);
+      }
+    }
+  };
+
   useFrame((state, delta) => {
     const currentTime = clock.current.getElapsedTime();
 
-    // Only spawn new minions if game is not over
-    if (!gameOver) {
+    // Only spawn new minions if:
+    // 1. Game is not over or victory
+    // 2. We haven't reached the total minions limit for this wave
+    if (
+      !gameStats.gameOver &&
+      !gameStats.victory &&
+      gameStats.minionsSpawned < gameStats.totalMinions
+    ) {
       // Handle minion spawning
       if (currentTime - lastSpawnTimeRef.current > MINION_SPAWN_INTERVAL) {
         // Only spawn if we're under the maximum active minions
@@ -468,6 +494,9 @@ const Ground = () => {
         lastSpawnTimeRef.current = currentTime;
       }
     }
+
+    // Check for wave completion
+    checkAndHandleWaveCompletion();
 
     // Update minion death animations
     updateMinionDeathAnimations(delta);
